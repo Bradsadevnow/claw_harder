@@ -398,3 +398,32 @@ Goal: map governed runtime mechanisms against known human-brain functional analo
   - bounded/causal trajectory windows
   - replay/live parity for affective evolution order and endpoint state
 
+
+## Progress checkpoint (2026-05-16): memory lifecycle observability
+
+### Update summary
+- Implemented explicit lifecycle audit events in `runtime_core/memory.py` as part of the cognition-contract hardening sequence.
+- Extended auditability from storage shape to transition semantics.
+
+### Events now emitted at memory substrate level
+- `epoch_created`
+- `epoch_closed`
+- `epoch_evicted` (with legacy `stm_epoch_evicted` retained)
+- `session_closed`
+- `compression_started`
+- `ltm_artifact_written`
+- `compression_completed`
+- `ltm_promoted`
+- `semantic_nomination_generated`
+- `nomination_rejected`
+- `context_admitted`
+
+### Architectural significance
+- Moves memory from passive persistence toward explicit transition forensics.
+- Supports replay debugging and continuity anomaly tracing without inferring hidden transitions.
+- Reinforces boundary: semantic nomination is suggestive only; governance admission is authoritative.
+
+### Validation
+- `runtime_core/tests/test_memory_contracts.py` updated with lifecycle/audit regressions.
+- Test run: `python3 -m pytest -q runtime_core/tests/test_memory_contracts.py` => `9 passed`.
+

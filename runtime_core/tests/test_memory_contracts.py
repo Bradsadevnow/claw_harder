@@ -41,6 +41,32 @@ class MemoryContractTests(unittest.TestCase):
         self.assertEqual(message_rows[-1].content, "a7")
         self.assertEqual([row.seq for row in memory.mtm.all()], sorted(row.seq for row in memory.mtm.all()))
 
+    def test_lifecycle_audit_events_cover_epoch_creation_eviction_and_close(self) -> None:
+        memory = MemoryStore()
+        for i in range(8):
+            memory.append("user", f"u{i}")
+            memory.append("assistant", f"a{i}")
+
+        kinds = [entry.event_kind for entry in memory.mtm.all()]
+        self.assertEqual(kinds.count("epoch_created"), 8)
+        self.assertEqual(kinds.count("epoch_closed"), 8)
+        self.assertEqual(kinds.count("epoch_evicted"), 2)
+
+    def test_session_close_emits_ltm_artifact_written_event(self) -> None:
+        memory = MemoryStore()
+        memory.append("user", "Need deployment plan")
+        memory.append("assistant", "Drafting plan")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact = memory.close_session(session_id="main", ltm_root=Path(tmpdir))
+            kinds = [entry.event_kind for entry in memory.mtm.all()]
+            self.assertIn("session_closed", kinds)
+            self.assertIn("compression_started", kinds)
+            self.assertIn("ltm_artifact_written", kinds)
+            self.assertIn("compression_completed", kinds)
+            self.assertIn("ltm_promoted", kinds)
+            self.assertTrue(artifact.artifact_id.startswith("LTM_main_"))
+
     def test_ltm_compression_writes_artifact_and_toc(self) -> None:
         memory = MemoryStore()
         memory.append("user", "Need deployment plan")
@@ -92,6 +118,40 @@ class MemoryContractTests(unittest.TestCase):
         nominations = enabled.nominate("governance admissibility", episodes=episodes, limit=3)
         self.assertEqual(len(nominations), 1)
         self.assertEqual(nominations[0].reference, "ep1")
+
+    def test_nomination_and_admission_emit_audit_events(self) -> None:
+        memory = MemoryStore()
+        episodes = [
+            {"artifact_id": "ep1", "session_id": "s1", "summary": "Recursive governance and runtime admissibility"},
+        ]
+
+        nominations = memory.semantic_nominate(
+            "governance admissibility",
+            episodes=episodes,
+            limit=3,
+            index=SemanticNominationIndex(enabled=True),
+        )
+        self.assertEqual(len(nominations), 1)
+
+        generated = [entry for entry in memory.mtm.all() if entry.event_kind == "semantic_nomination_generated"]
+        self.assertEqual(len(generated), 1)
+        self.assertEqual(generated[0].metadata.get("count"), 1)
+
+        semantic_decision = memory.admit_candidate(nominations[0])
+        self.assertEqual(semantic_decision.decision, "reject")
+
+        deterministic_candidate = RecallCandidate(
+            candidate_id="mtm:1",
+            source="mtm",
+            content="deterministic",
+            reference="seq:1",
+        )
+        deterministic_decision = memory.admit_candidate(deterministic_candidate)
+        self.assertEqual(deterministic_decision.decision, "admit")
+
+        kinds = [entry.event_kind for entry in memory.mtm.all()]
+        self.assertIn("nomination_rejected", kinds)
+        self.assertIn("context_admitted", kinds)
 
     def test_state_roundtrip_persists_memory_contract_structures(self) -> None:
         state = RuntimeState()

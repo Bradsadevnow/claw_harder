@@ -107,3 +107,39 @@ Validation:
 - `python3 -m unittest discover -s runtime_core/tests -p "test_*.py"` => pass
 - New test file: `runtime_core/tests/test_memory_contracts.py`
 
+
+## Progress Log — 2026-05-16 (lifecycle audit pass)
+
+Scope: `/home/brad/claw_harder/runtime_core`
+
+### What was implemented
+1. Memory lifecycle audit logging expanded in `runtime_core/memory.py`.
+2. Added explicit STM lifecycle coverage:
+   - `epoch_created`
+   - `epoch_closed`
+   - `epoch_evicted`
+   - legacy `stm_epoch_evicted` retained for compatibility
+3. Added session/LTM lifecycle signal:
+   - `ltm_artifact_written`
+4. Added semantic/admission audit hooks on `MemoryStore`:
+   - `semantic_nominate(...)` emits `semantic_nomination_generated`
+   - `admit_candidate(...)` emits `context_admitted` or `nomination_rejected`
+
+### Why this matters
+- Establishes explicit cognition lifecycle events for replay/debug/forensics.
+- Preserves deterministic memory contracts while extending observability.
+- Keeps semantic recall non-authoritative with governed admission audit trail.
+
+### Validation executed
+- `python3 -m pytest -q runtime_core/tests/test_memory_contracts.py`
+- Result: `9 passed`
+
+### New regression coverage
+- `test_lifecycle_audit_events_cover_epoch_creation_eviction_and_close`
+- `test_session_close_emits_ltm_artifact_written_event`
+- `test_nomination_and_admission_emit_audit_events`
+
+### Compatibility posture
+- No contract break in existing legacy event consumers.
+- Existing `stm_epoch_evicted` still emitted; new `epoch_evicted` added in parallel.
+

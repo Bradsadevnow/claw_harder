@@ -72,6 +72,7 @@ class StmAppendResult:
     epoch_id: str
     epoch_seq: int
     epoch_closed: bool
+    epoch_created: bool = False
     evicted_epoch_ids: list[str] = field(default_factory=list)
 
 
@@ -94,6 +95,7 @@ class StmStore:
         return self.open_epoch
 
     def append_frame(self, frame: MemoryFrame) -> StmAppendResult:
+        epoch_created = self.open_epoch is None
         epoch = self.open_epoch or self._begin_epoch(frame.ts)
         epoch.messages.append(frame)
         evicted: list[str] = []
@@ -111,6 +113,7 @@ class StmStore:
             epoch_id=epoch.epoch_id,
             epoch_seq=epoch.epoch_seq,
             epoch_closed=epoch_closed,
+            epoch_created=epoch_created,
             evicted_epoch_ids=evicted,
         )
 
@@ -695,9 +698,16 @@ class MemoryStore:
             metadata={
                 "epoch_id": stm_result.epoch_id,
                 "epoch_closed": stm_result.epoch_closed,
+                "epoch_created": stm_result.epoch_created,
                 "evicted_epoch_ids": list(stm_result.evicted_epoch_ids),
             },
         )
+        if stm_result.epoch_created:
+            self.mtm.append_event(
+                event_kind="epoch_created",
+                epoch_seq=stm_result.epoch_seq,
+                metadata={"epoch_id": stm_result.epoch_id, "opened_by_role": frame.role},
+            )
         if stm_result.epoch_closed:
             self.mtm.append_event(
                 event_kind="epoch_closed",
@@ -708,6 +718,10 @@ class MemoryStore:
             self.mtm.append_event(
                 event_kind="stm_epoch_evicted",
                 metadata={"epoch_id": evicted_id},
+            )
+            self.mtm.append_event(
+                event_kind="epoch_evicted",
+                metadata={"epoch_id": evicted_id, "source": "stm_window"},
             )
         return frame
 
@@ -730,6 +744,10 @@ class MemoryStore:
                 event_kind="stm_epoch_evicted",
                 metadata={"epoch_id": evicted_id, "reason": reason},
             )
+            self.mtm.append_event(
+                event_kind="epoch_evicted",
+                metadata={"epoch_id": evicted_id, "reason": reason, "source": "stm_window"},
+            )
         return closed
 
     def close_session(self, session_id: str, ltm_root: Path) -> LtmEpisodeArtifact:
@@ -738,6 +756,10 @@ class MemoryStore:
         archive = LtmArchive(ltm_root)
         self.mtm.append_event(event_kind="compression_started", metadata={"session_id": session_id})
         artifact = archive.compress_session(session_id=session_id, ledger=self.mtm, stm=self.stm)
+        self.mtm.append_event(
+            event_kind="ltm_artifact_written",
+            metadata={"session_id": session_id, "artifact_id": artifact.artifact_id},
+        )
         self.mtm.append_event(
             event_kind="compression_completed",
             metadata={"session_id": session_id, "artifact_id": artifact.artifact_id},
@@ -750,3 +772,52 @@ class MemoryStore:
         self._last_ltm_artifact = artifact.to_dict()
         self._ltm_toc_tail = [dict(item) for item in toc[-24:]]
         return artifact
+
+    def semantic_nominate(
+        self,
+        query: str,
+        *,
+        episodes: list[dict[str, Any]],
+        limit: int = 5,
+        index: SemanticNominationIndex | None = None,
+    ) -> list[RecallCandidate]:
+        nominee = index or SemanticNominationIndex(enabled=False)
+        candidates = nominee.nominate(query, episodes=episodes, limit=limit)
+        self.mtm.append_event(
+            event_kind="semantic_nomination_generated",
+            metadata={
+                "query": query,
+                "enabled": nominee.enabled,
+                "count": len(candidates),
+                "candidate_ids": [candidate.candidate_id for candidate in candidates],
+            },
+        )
+        return candidates
+
+    def admit_candidate(
+        self,
+        candidate: RecallCandidate,
+        *,
+        admitter: DeterministicAdmitter | None = None,
+    ) -> RecallDecision:
+        gate = admitter or DeterministicAdmitter()
+        decision = gate.evaluate(candidate)
+        if decision.decision == "admit":
+            self.mtm.append_event(
+                event_kind="context_admitted",
+                metadata={
+                    "candidate_id": candidate.candidate_id,
+                    "source": candidate.source,
+                    "reason_code": decision.reason_code,
+                },
+            )
+        else:
+            self.mtm.append_event(
+                event_kind="nomination_rejected",
+                metadata={
+                    "candidate_id": candidate.candidate_id,
+                    "source": candidate.source,
+                    "reason_code": decision.reason_code,
+                },
+            )
+        return decision
