@@ -1,0 +1,44 @@
+{
+  "id": "openclaw-manifest-engine",
+  "name": "OpenClaw Manifest Engine",
+  "description": "Replaces OpenClaw's naive transcript replay with a typed, versioned manifest system. Durable facts, bounded context, surgical recall.",
+  "activation": {
+    "onStartup": false
+  },
+  "enabledByDefault": false,
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "manifestRootDir": {
+        "type": "string",
+        "description": "Directory where per-session manifests are stored. Defaults to the session file's directory."
+      },
+      "maxContextChars": {
+        "type": "integer",
+        "minimum": 1000,
+        "description": "Maximum characters in the injected operational memory block. Default: 8000."
+      },
+      "maxFacts": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Maximum facts injected per turn. Default: 20."
+      },
+      "maxSummaries": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Maximum summaries injected per turn. Default: 4."
+      },
+      "maxWindowTokens": {
+        "type": "integer",
+        "minimum": 100,
+        "description": "Maximum token budget for sliding window history. Default: 6000."
+      },
+      "maxWindowTurns": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Maximum completed turns to keep in sliding window. Default: 5."
+      }
+    }
+  }
+}

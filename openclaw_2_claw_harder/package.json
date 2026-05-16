@@ -1,0 +1,62 @@
+{
+  "name": "openclaw-2-claw-harder",
+  "version": "0.1.0",
+  "description": "OPENCLAW II: CLAW HARDER. Replaces naive transcript replay with a typed, versioned, append-only manifest \u2014 durable facts, bounded context, surgical recall.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Brad Bates",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bradleybates1/openclaw_2_claw_harder.git"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "ai-agent",
+    "context-engine",
+    "memory",
+    "state-management",
+    "manifest-engine"
+  ],
+  "exports": {
+    ".": "./dist/index.js",
+    "./types": "./dist/types/manifest.js",
+    "./plugin": "./dist/adapters/plugin-entry.js"
+  },
+  "openclaw": {
+    "pluginEntry": "./dist/adapters/plugin-entry.js",
+    "extensions": [
+      "./dist/adapters/plugin-entry.js"
+    ]
+  },
+  "files": [
+    "dist/",
+    "openclaw.plugin.json",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-vm-modules node_modules/.bin/vitest run",
+    "test:watch": "vitest",
+    "test:validation": "node --experimental-vm-modules node_modules/.bin/vitest run test/validation/",
+    "test:lm-studio": "OPENCLAW_LM_STUDIO_LIVE=1 node --experimental-vm-modules node_modules/.bin/vitest run test/lm-studio/",
+    "demo": "node --loader ts-node/esm demo/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.5.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
